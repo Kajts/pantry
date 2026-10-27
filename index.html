@@ -3,41 +3,46 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#1f3d36">
+<meta name="theme-color" content="#f8f5f6">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Spiżarnia</title>
 <style>
-:root{--bg:#eef2ee;--card:#fff;--tx:#17201d;--mut:#66736e;--ac:#1f3d36;--hi:#e0a82e;--ln:#d5ddd8;--bad:#b4442c;box-sizing:border-box}
-@media(prefers-color-scheme:dark){:root{--bg:#121816;--card:#1b2420;--tx:#e8eeea;--mut:#8fa09a;--ac:#8fd0b5;--hi:#e0a82e;--ln:#2b3833;--bad:#f08a6e}}
+:root{--bg:#f8f5f6;--card:#fff;--tx:#2d2a32;--mut:#8a8591;--ac:#4f7564;--on:#fff;--soft:#edf3ef;--hi:#f6dde1;--hiT:#8a3b4f;--ln:#e9e3e6;--bad:#b5546a;--sh:0 1px 2px rgba(60,40,55,.05),0 6px 18px rgba(60,40,55,.06)}
+@media(prefers-color-scheme:dark){:root{--bg:#1a1719;--card:#242023;--tx:#f0ecee;--mut:#a39da6;--ac:#9cc9b4;--on:#17211c;--soft:#2b3631;--hi:#4a3239;--hiT:#f3c4cf;--ln:#352f33;--bad:#f0a0b3;--sh:0 1px 2px rgba(0,0,0,.3)}}
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
-body{padding:env(safe-area-inset-top) 0 calc(64px + env(safe-area-inset-bottom))}
-main{max-width:640px;margin:0 auto;padding:12px}
-h2{font-size:1.35rem;margin:6px 0 10px;letter-spacing:-.01em}
+html,body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.45 "Nunito",system-ui,-apple-system,"Segoe UI",sans-serif}
+body{padding:env(safe-area-inset-top) 0 calc(84px + env(safe-area-inset-bottom))}
+main{max-width:620px;margin:0 auto;padding:18px 16px}
+h2{font-size:1.65rem;font-weight:700;margin:4px 0 14px;letter-spacing:-.01em}
 .row{display:flex;gap:8px;align-items:center}
 input,textarea,button{font:inherit;color:inherit}
-input,textarea{width:100%;padding:11px 12px;border:1.5px solid var(--ln);border-radius:10px;background:var(--card)}
-input:focus,textarea:focus,button:focus-visible{outline:2px solid var(--hi);outline-offset:1px}
-textarea{min-height:76px;resize:vertical;margin-top:8px}
-button{border:0;border-radius:10px;padding:10px 14px;background:var(--ac);color:var(--bg);font-weight:600;cursor:pointer}
-button.g{background:transparent;color:var(--mut);padding:8px 10px;font-weight:500;border:1.5px solid var(--ln)}
-button.s{padding:6px 11px;min-width:36px}
-.it{background:var(--card);border:1.5px solid var(--ln);border-radius:12px;padding:10px 12px;margin-top:8px}
-.it .t{display:flex;gap:8px;align-items:center;justify-content:space-between}
-.n{font-weight:650}.m{color:var(--mut);font-size:.88rem;margin-top:2px}
-.q{min-width:62px;text-align:center;font-variant-numeric:tabular-nums}
+input,textarea{width:100%;padding:12px 16px;border:1.5px solid var(--ln);border-radius:16px;background:var(--card)}
+input::placeholder,textarea::placeholder{color:var(--mut)}
+input:focus,textarea:focus,button:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+textarea{min-height:80px;resize:vertical;margin-top:10px}
+button{border:0;border-radius:999px;padding:11px 20px;background:var(--ac);color:var(--on);font-weight:700;cursor:pointer}
+button.g{background:var(--soft);color:var(--ac)}
+button.s{padding:7px 14px;min-width:36px;font-size:.92rem}
+.it{background:var(--card);border-radius:20px;box-shadow:var(--sh);padding:14px 16px;margin-top:12px}
+.it .t{display:flex;gap:10px;align-items:center;justify-content:space-between}
+.n{font-weight:700}.m{color:var(--mut);font-size:.9rem;margin-top:2px}
+.q{min-width:64px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
 .ok{color:var(--ac)}.no{color:var(--bad)}
-.tag{display:inline-block;font-size:.78rem;padding:2px 8px;border-radius:99px;background:var(--hi);color:#222;font-weight:600}
-.always{border-left:5px solid var(--hi)}
+.tag{display:inline-block;font-size:.8rem;padding:3px 12px;border-radius:99px;background:var(--hi);color:var(--hiT);font-weight:700}
+.always{background:linear-gradient(0deg,var(--card),var(--card)) padding-box}
 .done .n{text-decoration:line-through;color:var(--mut)}
-nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--ac);padding-bottom:env(safe-area-inset-bottom)}
-nav button{flex:1;border-radius:0;background:transparent;color:var(--bg);opacity:.65;padding:14px 4px}
-nav button.on{opacity:1;box-shadow:inset 0 3px 0 var(--hi)}
+input[type=checkbox]{accent-color:var(--ac);width:22px;height:22px;padding:0;border-radius:8px}
+nav{position:fixed;left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom));max-width:596px;margin:0 auto;display:flex;gap:4px;padding:6px;background:var(--card);border-radius:24px;box-shadow:0 8px 28px rgba(60,40,55,.16)}
+nav button{flex:1;background:transparent;color:var(--mut);padding:11px 2px;font-size:.88rem}
+nav button.on{background:var(--hi);color:var(--hiT)}
 details summary{cursor:pointer;list-style:none}
 details summary::-webkit-details-marker{display:none}
-.empty{color:var(--mut);padding:18px 4px}
-#qr{background:#fff;padding:12px;display:inline-block;border-radius:12px}
-ul{padding-left:18px;margin:6px 0}
+.empty{color:var(--mut);padding:22px 6px;text-align:center}
+#qr{background:#fff;padding:14px;display:inline-block;border-radius:18px}
+ul{padding-left:20px;margin:8px 0}
+@media(prefers-reduced-motion:no-preference){button{transition:transform .1s}button:active{transform:scale(.97)}}
 </style>
 </head>
 <body>
@@ -124,36 +129,6 @@ function addTo(list,o){
 const have=ing=>{const p=S.pantry.filter(x=>same(x,ing));return p.some(x=>x.always)?Infinity:p.reduce((s,x)=>s+x.qty,0)};
 const missing=r=>r.ing.filter(i=>have(i)<i.qty);
 
-// ====== Dyktowanie ======
-const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-const NUM={zero:0,jeden:1,jedna:1,jedno:1,dwa:2,dwie:2,trzy:3,cztery:4,piec:5,szesc:6,siedem:7,osiem:8,dziewiec:9,dziesiec:10,pol:0.5};
-const UW={kilo:'kg',kilogram:'kg',kilogramy:'kg',kg:'kg',gram:'g',gramy:'g',g:'g',litr:'l',litry:'l',litrow:'l',l:'l',ml:'ml',szt:'szt',sztuki:'szt',sztuk:'szt',opakowanie:'opak',opakowania:'opak',opak:'opak'};
-const fold=w=>w.toLowerCase().replace(/ł/g,'l').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-// "mleko dwa jajka 10 i masło" => "mleko 2, jajka 10, masło"
-function voiceToList(txt){
-  const tk=txt.replace(/(\d)([a-zA-Z])/g,'$1 $2').replace(/,/g,' ').split(/\s+/).filter(Boolean);
-  const out=[];let name=[],pend=null;
-  const push=(q,u)=>{if(name.length)out.push(name.join(' ')+(q!=null?' '+q+(u?' '+u:''):''));name=[]};
-  for(let i=0;i<tk.length;i++){
-    const w=tk[i],f=fold(w);let n=null;
-    if(/^\d+([.,]\d+)?$/.test(w))n=parseFloat(w.replace(',','.'));else if(f in NUM)n=NUM[f];
-    if(n!==null){
-      let u='';const nx=tk[i+1]&&UW[fold(tk[i+1])];if(nx){u=nx;i++}
-      if(name.length){if(pend){push(pend.q,pend.u);pend={q:n,u}}else push(n,u)}else pend={q:n,u};
-    }else if(f==='i'){if(name.length){push(pend&&pend.q,pend&&pend.u);pend=null}}
-    else name.push(w);
-  }
-  push(pend&&pend.q,pend&&pend.u);
-  return out.join(', ');
-}
-function startMic(){
-  const r=new SR(),b=$('#mic');r.lang='pl-PL';r.interimResults=false;
-  b.textContent='…słucham';
-  r.onresult=ev=>{$('#q').value=voiceToList(ev.results[0][0].transcript)};
-  r.onend=()=>{b.textContent='🎤'};
-  r.onerror=ev=>{b.textContent='🎤';alert('Mikrofon: '+ev.error+'. Sprawdź zgodę na mikrofon w przeglądarce.')};
-  r.start();
-}
 // ====== Import przepisu z wklejonego tekstu ======
 function importText(t){
   t=t.replace(/½/g,'0,5').replace(/¼/g,'0,25').replace(/\b1\/2\b/g,'0,5').replace(/\b1\/4\b/g,'0,25').replace(/(^|\s)pół(?=\s)/gi,'$10,5');
@@ -183,7 +158,6 @@ const A={
   rnew(){draft=null;editR='new';render()},redit(i){draft=null;editR=i;render()},rcancel(){draft=null;editR=null;render()},
   rimp(){editR='import';render()},
   rimport(){const t=$('#ri2').value;if(!t.trim())return;draft=importText(t);editR='new';render()},
-  mic(){startMic()},
   rdel(i){if(confirm('Usunąć przepis?')){S.recipes=S.recipes.filter(x=>x.id!==i);save()}},
   rshop(i){missing(S.recipes.find(x=>x.id===i)).forEach(g=>addTo('shop',{name:g.name,unit:g.unit,qty:g.qty-(have(g)||0)}));save();tab='shop';render()},
   rcook(i){
@@ -204,7 +178,7 @@ document.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&ev.target.id==='q'
 const P=(...a)=>`data-p="${a.join('|')}"`;
 
 // ====== Widoki ======
-const quick=(act,ph)=>`<div class="row"><input id="q" placeholder="${ph}" autocomplete="off"><button data-a="${act}">Dodaj</button>${SR?'<button class="g" id="mic" data-a="mic" aria-label="Dyktuj">🎤</button>':''}</div>`;
+const quick=(act,ph)=>`<div class="row"><input id="q" placeholder="${ph}" autocomplete="off"><button data-a="${act}">Dodaj</button></div>`;
 const V={
 pantry(){
   const L=[...S.pantry].sort((a,b)=>a.name.localeCompare(b.name,'pl'));
