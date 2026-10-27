@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1f3d36">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Spiżarnia</title>
+<style>
+:root{--bg:#eef2ee;--card:#fff;--tx:#17201d;--mut:#66736e;--ac:#1f3d36;--hi:#e0a82e;--ln:#d5ddd8;--bad:#b4442c;box-sizing:border-box}
+@media(prefers-color-scheme:dark){:root{--bg:#121816;--card:#1b2420;--tx:#e8eeea;--mut:#8fa09a;--ac:#8fd0b5;--hi:#e0a82e;--ln:#2b3833;--bad:#f08a6e}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+body{padding:env(safe-area-inset-top) 0 calc(64px + env(safe-area-inset-bottom))}
+main{max-width:640px;margin:0 auto;padding:12px}
+h2{font-size:1.35rem;margin:6px 0 10px;letter-spacing:-.01em}
+.row{display:flex;gap:8px;align-items:center}
+input,textarea,button{font:inherit;color:inherit}
+input,textarea{width:100%;padding:11px 12px;border:1.5px solid var(--ln);border-radius:10px;background:var(--card)}
+input:focus,textarea:focus,button:focus-visible{outline:2px solid var(--hi);outline-offset:1px}
+textarea{min-height:76px;resize:vertical;margin-top:8px}
+button{border:0;border-radius:10px;padding:10px 14px;background:var(--ac);color:var(--bg);font-weight:600;cursor:pointer}
+button.g{background:transparent;color:var(--mut);padding:8px 10px;font-weight:500;border:1.5px solid var(--ln)}
+button.s{padding:6px 11px;min-width:36px}
+.it{background:var(--card);border:1.5px solid var(--ln);border-radius:12px;padding:10px 12px;margin-top:8px}
+.it .t{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.n{font-weight:650}.m{color:var(--mut);font-size:.88rem;margin-top:2px}
+.q{min-width:62px;text-align:center;font-variant-numeric:tabular-nums}
+.ok{color:var(--ac)}.no{color:var(--bad)}
+.tag{display:inline-block;font-size:.78rem;padding:2px 8px;border-radius:99px;background:var(--hi);color:#222;font-weight:600}
+.always{border-left:5px solid var(--hi)}
+.done .n{text-decoration:line-through;color:var(--mut)}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--ac);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border-radius:0;background:transparent;color:var(--bg);opacity:.65;padding:14px 4px}
+nav button.on{opacity:1;box-shadow:inset 0 3px 0 var(--hi)}
+details summary{cursor:pointer;list-style:none}
+details summary::-webkit-details-marker{display:none}
+.empty{color:var(--mut);padding:18px 4px}
+#qr{background:#fff;padding:12px;display:inline-block;border-radius:12px}
+ul{padding-left:18px;margin:6px 0}
+</style>
+</head>
+<body>
+<main id="v"></main>
+<nav id="nav">
+  <button data-t="pantry">Spiżarnia</button>
+  <button data-t="rec">Przepisy</button>
+  <button data-t="shop">Zakupy</button>
+  <button data-t="set">Ustawienia</button>
+</nav>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+// ====== KONFIGURACJA: wklej tu dane z Firebase (patrz instrukcja). Bez tego dane są tylko na tym telefonie. ======
+const FIREBASE_CONFIG = null;
+/* przykład:
+const FIREBASE_CONFIG = {apiKey:"...",authDomain:"...",projectId:"...",appId:"..."};
+*/
+
+// ====== Rozumienie słów: mleko / mleka / mleku => to samo ======
+const SYN={jaj:'jajk',jajek:'jajk',cukr:'cukier',maslo:'masl',ziemniak:'kartofl',kartofl:'kartofl'};
+function stem(w){
+  if(w.length>3){for(const e of ['ami','ach','iem','ow','om','em','ie','y','i','a','e','o','u']){
+    if(w.endsWith(e)&&w.length-e.length>=3){w=w.slice(0,-e.length);break}}}
+  return SYN[w]||w;
+}
+function key(s){
+  return s.toLowerCase().replace(/ł/g,'l').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(Boolean).map(stem).join(' ');
+}
+// "mleko 2", "2 mleka", "mąka 500 g", "jajka" => {name,qty,unit}
+function parse(t){
+  t=t.trim();let qty=1,unit='';
+  const m=t.match(/(^|\s)(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml|szt|opak)?(?=\s|$)/i);
+  if(m){qty=parseFloat(m[2].replace(',','.'));unit=(m[3]||'').toLowerCase();t=(t.slice(0,m.index)+' '+t.slice(m.index+m[0].length)).trim()}
+  return {name:t.replace(/\s+/g,' ')||'?',qty,unit};
+}
+
+// ====== Stan i synchronizacja ======
+const $=s=>document.querySelector(s), uid=()=>Math.random().toString(36).slice(2,9);
+const e=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=(q,u)=>(+(+q).toFixed(2))+(u?' '+u:'');
+const LS={get(k){try{return localStorage.getItem(k)}catch(_){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(_){}}};
+let S={pantry:[],recipes:[],shop:[]},tab='pantry',editR=null,ref=null,sync='lokalnie (bez Firebase)';
+let code=location.hash.slice(1)||LS.get('sp_code')||uid()+uid()+uid();
+LS.set('sp_code',code);try{history.replaceState(null,'','#'+code)}catch(_){}
+try{S=Object.assign(S,JSON.parse(LS.get('sp_'+code)||'{}'))}catch(_){}
+
+function save(){
+  LS.set('sp_'+code,JSON.stringify(S));
+  if(ref)ref.set(S).catch(err=>{sync='błąd: '+err.message;render()});
+  render();
+}
+if(FIREBASE_CONFIG&&window.firebase){
+  firebase.initializeApp(FIREBASE_CONFIG);
+  ref=firebase.firestore().collection('households').doc(code);
+  ref.onSnapshot(d=>{
+    sync='zsynchronizowano ✓';
+    if(!d.exists){ref.set(S);return}
+    if(d.metadata.hasPendingWrites)return;
+    S=Object.assign({pantry:[],recipes:[],shop:[]},d.data());
+    LS.set('sp_'+code,JSON.stringify(S));
+    if(!/INPUT|TEXTAREA/.test(document.activeElement.tagName))render();
+  },err=>{sync='błąd: '+err.message;render()});
+}
+
+// ====== Logika ======
+const same=(a,b)=>a.key===b.key&&(a.unit===b.unit||!a.unit||!b.unit);
+function addTo(list,o){
+  o.key=key(o.name);
+  const f=S[list].find(x=>same(x,o));
+  if(f){f.qty+=o.qty;if(!f.unit)f.unit=o.unit}
+  else S[list].push({id:uid(),name:o.name,key:o.key,qty:o.qty,unit:o.unit,note:'',always:false,done:false});
+}
+const have=ing=>{const p=S.pantry.filter(x=>same(x,ing));return p.some(x=>x.always)?Infinity:p.reduce((s,x)=>s+x.qty,0)};
+const missing=r=>r.ing.filter(i=>have(i)<i.qty);
+
+const A={
+  padd(){$('#q').value.split(/[,\n;]+/).filter(x=>x.trim()).forEach(x=>addTo('pantry',parse(x)));save()},
+  sadd(){$('#q').value.split(/[,\n;]+/).filter(x=>x.trim()).forEach(x=>addTo('shop',parse(x)));save()},
+  inc(l,i,d){const x=S[l].find(y=>y.id===i);const st=/^(g|ml)$/.test(x.unit)?100:1;x.qty=Math.max(0,x.qty+d*st);save()},
+  del(l,i){S[l]=S[l].filter(y=>y.id!==i);save()},
+  note(l,i){const x=S[l].find(y=>y.id===i);const v=prompt('Opis / notatka (np. marka, gdzie leży):',x.note);if(v!==null){x.note=v;save()}},
+  always(i){const x=S.pantry.find(y=>y.id===i);x.always=!x.always;save()},
+  chk(i){const x=S.shop.find(y=>y.id===i);x.done=!x.done;save()},
+  bought(){S.shop.filter(x=>x.done).forEach(x=>addTo('pantry',{name:x.name,qty:x.qty,unit:x.unit}));S.shop=S.shop.filter(x=>!x.done);save()},
+  rsave(){
+    const name=$('#rn').value.trim();if(!name)return alert('Podaj nazwę przepisu');
+    const r={id:editR&&editR!=='new'?editR:uid(),name,desc:$('#rd').value.trim(),steps:$('#rs').value.trim(),
+      ing:$('#ri').value.split('\n').filter(x=>x.trim()).map(x=>{const o=parse(x);o.key=key(o.name);return o})};
+    S.recipes=S.recipes.filter(x=>x.id!==r.id).concat(r);editR=null;save();
+  },
+  rnew(){editR='new';render()},redit(i){editR=i;render()},rcancel(){editR=null;render()},
+  rdel(i){if(confirm('Usunąć przepis?')){S.recipes=S.recipes.filter(x=>x.id!==i);save()}},
+  rshop(i){missing(S.recipes.find(x=>x.id===i)).forEach(g=>addTo('shop',{name:g.name,unit:g.unit,qty:g.qty-(have(g)||0)}));save();tab='shop';render()},
+  rcook(i){
+    S.recipes.find(x=>x.id===i).ing.forEach(g=>{
+      let left=g.qty;S.pantry.filter(x=>same(x,g)&&!x.always).forEach(x=>{const t=Math.min(x.qty,left);x.qty-=t;left-=t});
+    });
+    S.pantry=S.pantry.filter(x=>x.qty>0||x.always);save();
+  },
+  copy(){navigator.clipboard.writeText(location.href).then(()=>alert('Skopiowano link'))}
+};
+document.addEventListener('click',ev=>{
+  const b=ev.target.closest('[data-a]');if(!b)return;
+  const a=b.dataset.a;if(a==='tab'){tab=b.dataset.t;editR=null;render();return}
+  A[a](...(b.dataset.p?b.dataset.p.split('|').map(x=>isNaN(x)||x===''?x:+x):[]));
+});
+$('#nav').addEventListener('click',ev=>{const b=ev.target.closest('button');if(b){tab=b.dataset.t;editR=null;render()}});
+document.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&ev.target.id==='q')(tab==='shop'?A.sadd:A.padd)()});
+const P=(...a)=>`data-p="${a.join('|')}"`;
+
+// ====== Widoki ======
+const quick=(act,ph)=>`<div class="row"><input id="q" placeholder="${ph}" autocomplete="off"><button data-a="${act}">Dodaj</button></div>`;
+const V={
+pantry(){
+  const L=[...S.pantry].sort((a,b)=>a.name.localeCompare(b.name,'pl'));
+  return `<h2>Spiżarnia</h2>${quick('padd','mleko 2, jajka 10, mąka 1 kg')}
+  ${L.map(x=>`<div class="it ${x.always?'always':''}"><div class="t"><div><div class="n">${e(x.name)}</div>
+    ${x.note?`<div class="m">${e(x.note)}</div>`:''}</div>
+    <div class="row">${x.always?'<span class="tag">zawsze mam</span>':`<button class="g s" data-a="inc" ${P('pantry',x.id,-1)}>−</button><span class="q">${fmt(x.qty,x.unit)}</span><button class="g s" data-a="inc" ${P('pantry',x.id,1)}>+</button>`}</div></div>
+    <div class="row" style="margin-top:8px;justify-content:flex-end">
+    <button class="g s" data-a="note" ${P('pantry',x.id)}>Opis</button>
+    <button class="g s" data-a="always" ${P(x.id)}>${x.always?'Policz':'Zawsze mam'}</button>
+    <button class="g s" data-a="del" ${P('pantry',x.id)}>Usuń</button></div></div>`).join('')||'<p class="empty">Pusto. Wpisz powyżej, co masz w domu, rozdzielając przecinkami.</p>'}`;
+},
+rec(){
+  if(editR){
+    const r=editR==='new'?{name:'',desc:'',steps:'',ing:[]}:S.recipes.find(x=>x.id===editR);
+    return `<h2>${editR==='new'?'Nowy przepis':'Edytuj przepis'}</h2>
+    <input id="rn" placeholder="Nazwa" value="${e(r.name)}">
+    <textarea id="rd" placeholder="Opis (np. ulubione naleśniki niedzielne)">${e(r.desc)}</textarea>
+    <textarea id="ri" placeholder="Składniki, każdy w nowej linii&#10;mąka 250 g&#10;mleko 0,5 l&#10;jajka 2" style="min-height:130px">${e(r.ing.map(i=>`${i.name} ${i.qty}${i.unit?' '+i.unit:''}`).join('\n'))}</textarea>
+    <textarea id="rs" placeholder="Kroki przygotowania" style="min-height:130px">${e(r.steps)}</textarea>
+    <div class="row" style="margin-top:10px"><button data-a="rsave">Zapisz</button><button class="g" data-a="rcancel">Anuluj</button></div>`;
+  }
+  return `<h2>Przepisy</h2><button data-a="rnew">+ Nowy przepis</button>
+  ${S.recipes.map(r=>{const mi=missing(r);return `<details class="it"><summary><div class="t"><span class="n">${e(r.name)}</span>
+    ${mi.length?`<span class="m no">brakuje ${mi.length}</span>`:'<span class="m ok">masz wszystko ✓</span>'}</div>
+    ${r.desc?`<div class="m">${e(r.desc)}</div>`:''}</summary>
+    <ul>${r.ing.map(i=>`<li class="${have(i)>=i.qty?'ok':'no'}">${e(i.name)} ${fmt(i.qty,i.unit)}</li>`).join('')}</ul>
+    <div style="white-space:pre-wrap">${e(r.steps)}</div>
+    <div class="row" style="margin-top:10px;flex-wrap:wrap">
+    ${mi.length?`<button class="s" data-a="rshop" ${P(r.id)}>Braki → zakupy</button>`:''}
+    <button class="s" data-a="rcook" ${P(r.id)}>Ugotowane (odejmij)</button>
+    <button class="g s" data-a="redit" ${P(r.id)}>Edytuj</button><button class="g s" data-a="rdel" ${P(r.id)}>Usuń</button></div></details>`}).join('')||'<p class="empty">Dodaj pierwszy przepis, który często gotujecie.</p>'}`;
+},
+shop(){
+  const n=S.shop.filter(x=>x.done).length;
+  return `<h2>Zakupy</h2>${quick('sadd','masło, 2 cebule, ser 300 g')}
+  ${S.shop.map(x=>`<div class="it ${x.done?'done':''}"><div class="t"><label class="row" style="flex:1"><input type="checkbox" style="width:22px;height:22px" ${x.done?'checked':''} data-a="chk" ${P(x.id)}><span class="n">${e(x.name)}</span><span class="m">${fmt(x.qty,x.unit)}</span></label>
+  <button class="g s" data-a="del" ${P('shop',x.id)}>Usuń</button></div></div>`).join('')||'<p class="empty">Lista pusta. Dodaj rzeczy lub użyj „Braki → zakupy” w przepisie.</p>'}
+  ${n?`<div style="margin-top:14px"><button data-a="bought">Kupione (${n}) → do spiżarni</button></div>`:''}`;
+},
+set(){
+  return `<h2>Ustawienia</h2><div class="it"><div class="n">Synchronizacja</div><div class="m">${e(sync)}</div></div>
+  <div class="it"><div class="n">Kod do drzwi spiżarki</div><div class="m">Ten kod QR otwiera aplikację z waszymi wspólnymi danymi. Wydrukuj i przyklej.</div>
+  <p><span id="qr"></span></p><button class="g s" data-a="copy">Kopiuj link</button></div>`;
+}};
+
+function render(){
+  $('#v').innerHTML=V[tab]();
+  document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===tab));
+  if(tab==='set'&&window.QRCode)new QRCode($('#qr'),{text:location.href,width:200,height:200});
+}
+render();
+</script>
+</body>
+</html>
