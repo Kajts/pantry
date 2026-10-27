@@ -54,10 +54,16 @@ ul{padding-left:18px;margin:6px 0}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 // ====== KONFIGURACJA: wklej tu dane z Firebase (patrz instrukcja). Bez tego dane są tylko na tym telefonie. ======
-const FIREBASE_CONFIG = null;
-/* przykład:
-const FIREBASE_CONFIG = {apiKey:"...",authDomain:"...",projectId:"...",appId:"..."};
-*/
+//const FIREBASE_CONFIG = null;
+
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyA6lxC6xnzpwEZF9X1jfmUAQhtFvwWyDLk",
+  authDomain: "pantry-home-db5d5.firebaseapp.com",
+  projectId: "pantry-home-db5d5",
+  storageBucket: "pantry-home-db5d5.firebasestorage.app",
+  messagingSenderId: "573643950047",
+  appId: "1:573643950047:web:7df7b74773a6e10732a66a"
+};
 
 // ====== Rozumienie słów: mleko / mleka / mleku => to samo ======
 const SYN={jaj:'jajk',jajek:'jajk',cukr:'cukier',maslo:'masl',ziemniak:'kartofl',kartofl:'kartofl'};
