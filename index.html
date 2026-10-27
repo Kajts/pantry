@@ -54,8 +54,6 @@ ul{padding-left:18px;margin:6px 0}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 // ====== KONFIGURACJA: wklej tu dane z Firebase (patrz instrukcja). Bez tego dane są tylko na tym telefonie. ======
-//const FIREBASE_CONFIG = null;
-
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyA6lxC6xnzpwEZF9X1jfmUAQhtFvwWyDLk",
   authDomain: "pantry-home-db5d5.firebaseapp.com",
@@ -64,6 +62,9 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "573643950047",
   appId: "1:573643950047:web:7df7b74773a6e10732a66a"
 };
+/* przykład:
+const FIREBASE_CONFIG = {apiKey:"...",authDomain:"...",projectId:"...",appId:"..."};
+*/
 
 // ====== Rozumienie słów: mleko / mleka / mleku => to samo ======
 const SYN={jaj:'jajk',jajek:'jajk',cukr:'cukier',maslo:'masl',ziemniak:'kartofl',kartofl:'kartofl'};
@@ -79,8 +80,8 @@ function key(s){
 // "mleko 2", "2 mleka", "mąka 500 g", "jajka" => {name,qty,unit}
 function parse(t){
   t=t.trim();let qty=1,unit='';
-  const m=t.match(/(^|\s)(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml|szt|opak)?(?=\s|$)/i);
-  if(m){qty=parseFloat(m[2].replace(',','.'));unit=(m[3]||'').toLowerCase();t=(t.slice(0,m.index)+' '+t.slice(m.index+m[0].length)).trim()}
+  const m=t.match(/(^|\s)(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml|szt|litr\w*|kilo\w*|gram\w*|opak\w*|łyżk\w*|łyżecz\w*|szklan\w*|szczypt\w*|ząb\w*|plast\w*|garś\w*|puszk\w*)?(?=\s|$)/i);
+  if(m){qty=parseFloat(m[2].replace(',','.'));unit=(m[3]||'').toLowerCase().replace(/^litr.*/,'l').replace(/^kilo.*/,'kg').replace(/^gram.*/,'g');t=(t.slice(0,m.index)+' '+t.slice(m.index+m[0].length)).trim()}
   return {name:t.replace(/\s+/g,' ')||'?',qty,unit};
 }
 
@@ -89,7 +90,7 @@ const $=s=>document.querySelector(s), uid=()=>Math.random().toString(36).slice(2
 const e=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt=(q,u)=>(+(+q).toFixed(2))+(u?' '+u:'');
 const LS={get(k){try{return localStorage.getItem(k)}catch(_){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(_){}}};
-let S={pantry:[],recipes:[],shop:[]},tab='pantry',editR=null,ref=null,sync='lokalnie (bez Firebase)';
+let S={pantry:[],recipes:[],shop:[]},tab='pantry',editR=null,draft=null,ref=null,sync='lokalnie (bez Firebase)';
 let code=location.hash.slice(1)||LS.get('sp_code')||uid()+uid()+uid();
 LS.set('sp_code',code);try{history.replaceState(null,'','#'+code)}catch(_){}
 try{S=Object.assign(S,JSON.parse(LS.get('sp_'+code)||'{}'))}catch(_){}
@@ -123,6 +124,47 @@ function addTo(list,o){
 const have=ing=>{const p=S.pantry.filter(x=>same(x,ing));return p.some(x=>x.always)?Infinity:p.reduce((s,x)=>s+x.qty,0)};
 const missing=r=>r.ing.filter(i=>have(i)<i.qty);
 
+// ====== Dyktowanie ======
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+const NUM={zero:0,jeden:1,jedna:1,jedno:1,dwa:2,dwie:2,trzy:3,cztery:4,piec:5,szesc:6,siedem:7,osiem:8,dziewiec:9,dziesiec:10,pol:0.5};
+const UW={kilo:'kg',kilogram:'kg',kilogramy:'kg',kg:'kg',gram:'g',gramy:'g',g:'g',litr:'l',litry:'l',litrow:'l',l:'l',ml:'ml',szt:'szt',sztuki:'szt',sztuk:'szt',opakowanie:'opak',opakowania:'opak',opak:'opak'};
+const fold=w=>w.toLowerCase().replace(/ł/g,'l').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+// "mleko dwa jajka 10 i masło" => "mleko 2, jajka 10, masło"
+function voiceToList(txt){
+  const tk=txt.replace(/(\d)([a-zA-Z])/g,'$1 $2').replace(/,/g,' ').split(/\s+/).filter(Boolean);
+  const out=[];let name=[],pend=null;
+  const push=(q,u)=>{if(name.length)out.push(name.join(' ')+(q!=null?' '+q+(u?' '+u:''):''));name=[]};
+  for(let i=0;i<tk.length;i++){
+    const w=tk[i],f=fold(w);let n=null;
+    if(/^\d+([.,]\d+)?$/.test(w))n=parseFloat(w.replace(',','.'));else if(f in NUM)n=NUM[f];
+    if(n!==null){
+      let u='';const nx=tk[i+1]&&UW[fold(tk[i+1])];if(nx){u=nx;i++}
+      if(name.length){if(pend){push(pend.q,pend.u);pend={q:n,u}}else push(n,u)}else pend={q:n,u};
+    }else if(f==='i'){if(name.length){push(pend&&pend.q,pend&&pend.u);pend=null}}
+    else name.push(w);
+  }
+  push(pend&&pend.q,pend&&pend.u);
+  return out.join(', ');
+}
+function startMic(){
+  const r=new SR(),b=$('#mic');r.lang='pl-PL';r.interimResults=false;
+  b.textContent='…słucham';
+  r.onresult=ev=>{$('#q').value=voiceToList(ev.results[0][0].transcript)};
+  r.onend=()=>{b.textContent='🎤'};
+  r.onerror=ev=>{b.textContent='🎤';alert('Mikrofon: '+ev.error+'. Sprawdź zgodę na mikrofon w przeglądarce.')};
+  r.start();
+}
+// ====== Import przepisu z wklejonego tekstu ======
+function importText(t){
+  t=t.replace(/½/g,'0,5').replace(/¼/g,'0,25').replace(/\b1\/2\b/g,'0,5').replace(/\b1\/4\b/g,'0,25').replace(/(^|\s)pół(?=\s)/gi,'$10,5');
+  const L=t.split('\n').map(x=>x.replace(/^[\s\-–•*☐□▢]+/,'').replace(/\(.*?\)/g,'').trim()).filter(Boolean);
+  const iI=L.findIndex(x=>/^sk[łl]adniki/i.test(x)),iS=L.findIndex(x=>/^(przygotowanie|spos[oó]b|kroki|wykonanie|instrukcj)/i.test(x));
+  const title=(iI!==0&&iS!==0)?L[0]:'';
+  const ing=iI>=0?L.slice(iI+1,iS>iI?iS:undefined):[];
+  const steps=iS>=0?L.slice(iS+1):(iI>=0?[]:L.slice(1));
+  return {name:title,desc:'',steps:steps.join('\n'),ingText:ing.join('\n'),ing:[]};
+}
+
 const A={
   padd(){$('#q').value.split(/[,\n;]+/).filter(x=>x.trim()).forEach(x=>addTo('pantry',parse(x)));save()},
   sadd(){$('#q').value.split(/[,\n;]+/).filter(x=>x.trim()).forEach(x=>addTo('shop',parse(x)));save()},
@@ -136,9 +178,12 @@ const A={
     const name=$('#rn').value.trim();if(!name)return alert('Podaj nazwę przepisu');
     const r={id:editR&&editR!=='new'?editR:uid(),name,desc:$('#rd').value.trim(),steps:$('#rs').value.trim(),
       ing:$('#ri').value.split('\n').filter(x=>x.trim()).map(x=>{const o=parse(x);o.key=key(o.name);return o})};
-    S.recipes=S.recipes.filter(x=>x.id!==r.id).concat(r);editR=null;save();
+    S.recipes=S.recipes.filter(x=>x.id!==r.id).concat(r);editR=null;draft=null;save();
   },
-  rnew(){editR='new';render()},redit(i){editR=i;render()},rcancel(){editR=null;render()},
+  rnew(){draft=null;editR='new';render()},redit(i){draft=null;editR=i;render()},rcancel(){draft=null;editR=null;render()},
+  rimp(){editR='import';render()},
+  rimport(){const t=$('#ri2').value;if(!t.trim())return;draft=importText(t);editR='new';render()},
+  mic(){startMic()},
   rdel(i){if(confirm('Usunąć przepis?')){S.recipes=S.recipes.filter(x=>x.id!==i);save()}},
   rshop(i){missing(S.recipes.find(x=>x.id===i)).forEach(g=>addTo('shop',{name:g.name,unit:g.unit,qty:g.qty-(have(g)||0)}));save();tab='shop';render()},
   rcook(i){
@@ -159,7 +204,7 @@ document.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&ev.target.id==='q'
 const P=(...a)=>`data-p="${a.join('|')}"`;
 
 // ====== Widoki ======
-const quick=(act,ph)=>`<div class="row"><input id="q" placeholder="${ph}" autocomplete="off"><button data-a="${act}">Dodaj</button></div>`;
+const quick=(act,ph)=>`<div class="row"><input id="q" placeholder="${ph}" autocomplete="off"><button data-a="${act}">Dodaj</button>${SR?'<button class="g" id="mic" data-a="mic" aria-label="Dyktuj">🎤</button>':''}</div>`;
 const V={
 pantry(){
   const L=[...S.pantry].sort((a,b)=>a.name.localeCompare(b.name,'pl'));
@@ -173,18 +218,21 @@ pantry(){
     <button class="g s" data-a="del" ${P('pantry',x.id)}>Usuń</button></div></div>`).join('')||'<p class="empty">Pusto. Wpisz powyżej, co masz w domu, rozdzielając przecinkami.</p>'}`;
 },
 rec(){
+  if(editR==='import')return `<h2>Importuj przepis</h2><p class="m">Skopiuj tekst przepisu ze strony (tytuł, składniki, sposób przygotowania) i wklej tutaj. Aplikacja rozpozna sekcje, a przed zapisem możesz wszystko poprawić.</p>
+    <textarea id="ri2" style="min-height:240px" placeholder="Wklej tutaj tekst przepisu"></textarea>
+    <div class="row" style="margin-top:10px"><button data-a="rimport">Rozpoznaj</button><button class="g" data-a="rcancel">Anuluj</button></div>`;
   if(editR){
-    const r=editR==='new'?{name:'',desc:'',steps:'',ing:[]}:S.recipes.find(x=>x.id===editR);
+    const r=editR==='new'?(draft||{name:'',desc:'',steps:'',ing:[]}):S.recipes.find(x=>x.id===editR);
     return `<h2>${editR==='new'?'Nowy przepis':'Edytuj przepis'}</h2>
     <input id="rn" placeholder="Nazwa" value="${e(r.name)}">
     <textarea id="rd" placeholder="Opis (np. ulubione naleśniki niedzielne)">${e(r.desc)}</textarea>
-    <textarea id="ri" placeholder="Składniki, każdy w nowej linii&#10;mąka 250 g&#10;mleko 0,5 l&#10;jajka 2" style="min-height:130px">${e(r.ing.map(i=>`${i.name} ${i.qty}${i.unit?' '+i.unit:''}`).join('\n'))}</textarea>
+    <textarea id="ri" placeholder="Składniki, każdy w nowej linii&#10;mąka 250 g&#10;mleko 0,5 l&#10;jajka 2" style="min-height:130px">${e(r.ingText??r.ing.map(i=>`${i.name} ${i.qty}${i.unit?' '+i.unit:''}`).join('\n'))}</textarea>
     <textarea id="rs" placeholder="Kroki przygotowania" style="min-height:130px">${e(r.steps)}</textarea>
     <div class="row" style="margin-top:10px"><button data-a="rsave">Zapisz</button><button class="g" data-a="rcancel">Anuluj</button></div>`;
   }
-  return `<h2>Przepisy</h2><button data-a="rnew">+ Nowy przepis</button>
-  ${S.recipes.map(r=>{const mi=missing(r);return `<details class="it"><summary><div class="t"><span class="n">${e(r.name)}</span>
-    ${mi.length?`<span class="m no">brakuje ${mi.length}</span>`:'<span class="m ok">masz wszystko ✓</span>'}</div>
+  return `<h2>Przepisy</h2><div class="row"><button data-a="rnew">+ Nowy przepis</button><button class="g" data-a="rimp">Importuj</button></div><div class="m" style="margin-top:6px">Od najłatwiejszych do ugotowania</div>
+  ${[...S.recipes].map(r=>({r,mi:missing(r)})).sort((a,b)=>a.mi.length-b.mi.length||a.r.name.localeCompare(b.r.name,'pl')).map(({r,mi})=>{return `<details class="it"><summary><div class="t"><span class="n">${e(r.name)}</span>
+    ${mi.length===0?'<span class="m ok">masz wszystko ✓</span>':mi.length===1?`<span class="m no">brakuje tylko: ${e(mi[0].name)}</span>`:`<span class="m no">brakuje ${mi.length}</span>`}</div>
     ${r.desc?`<div class="m">${e(r.desc)}</div>`:''}</summary>
     <ul>${r.ing.map(i=>`<li class="${have(i)>=i.qty?'ok':'no'}">${e(i.name)} ${fmt(i.qty,i.unit)}</li>`).join('')}</ul>
     <div style="white-space:pre-wrap">${e(r.steps)}</div>
