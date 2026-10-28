@@ -42,6 +42,8 @@ details summary::-webkit-details-marker{display:none}
 .empty{color:var(--mut);padding:22px 6px;text-align:center}
 #qr{background:#fff;padding:14px;display:inline-block;border-radius:18px}
 ul{padding-left:20px;margin:8px 0}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;background:var(--tx);color:var(--bg);padding:10px 18px;border-radius:999px;opacity:0;pointer-events:none;transition:opacity .2s;font-weight:700;z-index:9}#toast.show{opacity:1}
+.ing-row{display:flex;gap:8px;margin-top:8px}.ing-row .pn{flex:3;min-width:0}.ing-row .pa{flex:2;min-width:0}.ing-row button{padding:8px 14px}
 @media(prefers-reduced-motion:no-preference){button{transition:transform .1s}button:active{transform:scale(.97)}}
 </style>
 </head>
@@ -95,7 +97,7 @@ const $=s=>document.querySelector(s), uid=()=>Math.random().toString(36).slice(2
 const e=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt=(q,u)=>(+(+q).toFixed(2))+(u?' '+u:'');
 const LS={get(k){try{return localStorage.getItem(k)}catch(_){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(_){}}};
-let S={pantry:[],recipes:[],shop:[]},tab='pantry',editR=null,draft=null,ref=null,sync='lokalnie (bez Firebase)';
+let S={pantry:[],recipes:[],shop:[]},tab='pantry',editR=null,draft=null,noteId=null,delId=null,ref=null,sync='lokalnie (bez Firebase)';
 let code=location.hash.slice(1)||LS.get('sp_code')||uid()+uid()+uid();
 LS.set('sp_code',code);try{history.replaceState(null,'','#'+code)}catch(_){}
 try{S=Object.assign(S,JSON.parse(LS.get('sp_'+code)||'{}'))}catch(_){}
@@ -126,8 +128,20 @@ function addTo(list,o){
   if(f){f.qty+=o.qty;if(!f.unit)f.unit=o.unit}
   else S[list].push({id:uid(),name:o.name,key:o.key,qty:o.qty,unit:o.unit,note:'',always:false,done:false});
 }
-const have=ing=>{const p=S.pantry.filter(x=>same(x,ing));return p.some(x=>x.always)?Infinity:p.reduce((s,x)=>s+x.qty,0)};
-const missing=r=>r.ing.filter(i=>have(i)<i.qty);
+const toBase=(q,u)=>u==='kg'?[q*1000,'g']:u==='l'?[q*1000,'ml']:[q,u];
+const nu=u=>{u=toBase(0,u)[1];return u==='szt'?'':u};
+const compat=(a,b)=>a.key===b.key&&nu(a.unit)===nu(b.unit);
+// Porównuje ilości tylko gdy jednostki są zgodne (g z g, ml z ml, sztuki ze sztukami).
+// Gdy się nie da (np. w spiżarni "mleko 1", w przepisie "mleko 200 g"), liczy się sam fakt, że produkt jest.
+const have=ing=>{
+  const p=S.pantry.filter(x=>x.key===ing.key&&(x.qty>0||x.always));
+  if(p.some(x=>x.always))return Infinity;
+  const f=/^(kg|l)$/.test(ing.unit)?1000:1;let sum=0;
+  for(const x of p){if(nu(x.unit)===nu(ing.unit))sum+=toBase(x.qty,x.unit)[0];else return Infinity}
+  return sum/f;
+};
+const short=i=>i.qty>0?have(i)<i.qty:have(i)<=0;
+const missing=r=>r.ing.filter(short);
 
 // ====== Import przepisu z wklejonego tekstu ======
 function importText(t){
@@ -143,40 +157,49 @@ function importText(t){
 const A={
   padd(){$('#q').value.split(/[,\n;]+/).filter(x=>x.trim()).forEach(x=>addTo('pantry',parse(x)));save()},
   sadd(){$('#q').value.split(/[,\n;]+/).filter(x=>x.trim()).forEach(x=>addTo('shop',parse(x)));save()},
-  inc(l,i,d){const x=S[l].find(y=>y.id===i);const st=/^(g|ml)$/.test(x.unit)?100:1;x.qty=Math.max(0,x.qty+d*st);save()},
+  inc(l,i,d){d=+d;const x=S[l].find(y=>y.id===i);const st=/^(g|ml)$/.test(x.unit)?100:1;x.qty=Math.max(0,x.qty+d*st);save()},
   del(l,i){S[l]=S[l].filter(y=>y.id!==i);save()},
-  note(l,i){const x=S[l].find(y=>y.id===i);const v=prompt('Opis / notatka (np. marka, gdzie leży):',x.note);if(v!==null){x.note=v;save()}},
+  note(l,i){noteId=i;render();setTimeout(()=>{const f=$('#nt');if(f){f.focus();f.select()}},0)},
+  notesave(i){const x=S.pantry.find(y=>y.id===i);if(x)x.note=$('#nt').value.trim();noteId=null;save()},
+  notecancel(){noteId=null;render()},
   always(i){const x=S.pantry.find(y=>y.id===i);x.always=!x.always;save()},
   chk(i){const x=S.shop.find(y=>y.id===i);x.done=!x.done;save()},
   bought(){S.shop.filter(x=>x.done).forEach(x=>addTo('pantry',{name:x.name,qty:x.qty,unit:x.unit}));S.shop=S.shop.filter(x=>!x.done);save()},
   rsave(){
-    const name=$('#rn').value.trim();if(!name)return alert('Podaj nazwę przepisu');
+    const name=$('#rn').value.trim();if(!name)return toast('Podaj nazwę przepisu');
     const r={id:editR&&editR!=='new'?editR:uid(),name,desc:$('#rd').value.trim(),steps:$('#rs').value.trim(),
-      ing:$('#ri').value.split('\n').filter(x=>x.trim()).map(x=>{const o=parse(x);o.key=key(o.name);return o})};
+      ing:[...document.querySelectorAll('.ing-row')].map(r=>({n:r.querySelector('.pn').value.trim(),a:r.querySelector('.pa').value.trim()})).filter(x=>x.n).map(x=>{let qty=0,unit='';if(/\d/.test(x.a)){const o=parse('x '+x.a);qty=o.qty;unit=o.unit}return {name:x.n,qty,unit,key:key(x.n)}})};
     S.recipes=S.recipes.filter(x=>x.id!==r.id).concat(r);editR=null;draft=null;save();
   },
   rnew(){draft=null;editR='new';render()},redit(i){draft=null;editR=i;render()},rcancel(){draft=null;editR=null;render()},
   rimp(){editR='import';render()},
+  ing(){$('#ings').insertAdjacentHTML('beforeend',ingRow('',''))},
   rimport(){const t=$('#ri2').value;if(!t.trim())return;draft=importText(t);editR='new';render()},
-  rdel(i){if(confirm('Usunąć przepis?')){S.recipes=S.recipes.filter(x=>x.id!==i);save()}},
-  rshop(i){missing(S.recipes.find(x=>x.id===i)).forEach(g=>addTo('shop',{name:g.name,unit:g.unit,qty:g.qty-(have(g)||0)}));save();tab='shop';render()},
+  rdel(i){if(delId!==i){delId=i;render();setTimeout(()=>{if(delId===i){delId=null;render()}},4000);return}delId=null;S.recipes=S.recipes.filter(x=>x.id!==i);save()},
+  rshop(i){missing(S.recipes.find(x=>x.id===i)).forEach(g=>addTo('shop',{name:g.name,unit:g.unit,qty:g.qty>0?g.qty-have(g):1}));save();tab='shop';render()},
   rcook(i){
     S.recipes.find(x=>x.id===i).ing.forEach(g=>{
-      let left=g.qty;S.pantry.filter(x=>same(x,g)&&!x.always).forEach(x=>{const t=Math.min(x.qty,left);x.qty-=t;left-=t});
+      if(!(g.qty>0))return;let left=toBase(g.qty,g.unit)[0];S.pantry.filter(x=>compat(x,g)&&!x.always).forEach(x=>{const f=/^(kg|l)$/.test(x.unit)?1000:1;const t=Math.min(x.qty*f,left);x.qty=+((x.qty*f-t)/f).toFixed(3);left-=t});
     });
     S.pantry=S.pantry.filter(x=>x.qty>0||x.always);save();
   },
-  copy(){navigator.clipboard.writeText(location.href).then(()=>alert('Skopiowano link'))}
+  copy(){navigator.clipboard.writeText(location.href).then(()=>toast('Skopiowano link'),()=>toast('Nie udało się skopiować'))}
 };
 document.addEventListener('click',ev=>{
   const b=ev.target.closest('[data-a]');if(!b)return;
-  const a=b.dataset.a;if(a==='tab'){tab=b.dataset.t;editR=null;render();return}
-  A[a](...(b.dataset.p?b.dataset.p.split('|').map(x=>isNaN(x)||x===''?x:+x):[]));
+  const a=b.dataset.a;if(a==='ingx'){b.closest('.ing-row').remove();return}if(a==='tab'){tab=b.dataset.t;editR=null;render();return}
+  A[a](...(b.dataset.p?b.dataset.p.split('|'):[]));
 });
 $('#nav').addEventListener('click',ev=>{const b=ev.target.closest('button');if(b){tab=b.dataset.t;editR=null;render()}});
-document.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&ev.target.id==='q')(tab==='shop'?A.sadd:A.padd)()});
+document.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&ev.target.id==='nt')A.notesave(noteId);if(ev.key==='Enter'&&ev.target.id==='q')(tab==='shop'?A.sadd:A.padd)()});
+function toast(m){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';document.body.appendChild(t)}t.textContent=m;t.className='show';clearTimeout(toast.h);toast.h=setTimeout(()=>{t.className=''},2600)}
 const P=(...a)=>`data-p="${a.join('|')}"`;
 
+const ingRow=(n,a)=>`<div class="ing-row"><input class="pn" list="dl" placeholder="produkt, np. makaron penne" value="${e(n)}" autocomplete="off"><input class="pa" placeholder="ile, np. 200 g" value="${e(a)}" autocomplete="off"><button class="g" data-a="ingx" aria-label="Usuń składnik">×</button></div>`;
+function rowsFrom(r){
+  const rows=r.ingText!==undefined?r.ingText.split('\n').filter(x=>x.trim()).map(l=>{if(!/\d/.test(l))return [l.trim(),''];const o=parse(l);return [o.name,fmt(o.qty,o.unit)]}):r.ing.map(i=>[i.name,i.qty>0?fmt(i.qty,i.unit):'']);
+  while(rows.length<3)rows.push(['','']);return rows;
+}
 // ====== Widoki ======
 const quick=(act,ph)=>`<div class="row"><input id="q" placeholder="${ph}" autocomplete="off"><button data-a="${act}">Dodaj</button></div>`;
 const V={
@@ -186,7 +209,7 @@ pantry(){
   ${L.map(x=>`<div class="it ${x.always?'always':''}"><div class="t"><div><div class="n">${e(x.name)}</div>
     ${x.note?`<div class="m">${e(x.note)}</div>`:''}</div>
     <div class="row">${x.always?'<span class="tag">zawsze mam</span>':`<button class="g s" data-a="inc" ${P('pantry',x.id,-1)}>−</button><span class="q">${fmt(x.qty,x.unit)}</span><button class="g s" data-a="inc" ${P('pantry',x.id,1)}>+</button>`}</div></div>
-    <div class="row" style="margin-top:8px;justify-content:flex-end">
+    ${noteId===x.id?`<div class="row" style="margin-top:10px"><input id="nt" value="${e(x.note)}" placeholder="np. dolna półka, marka, otwarte 20.10" autocomplete="off"><button class="s" data-a="notesave" data-p="${x.id}">Zapisz</button><button class="g s" data-a="notecancel">×</button></div>`:''}<div class="row" style="margin-top:8px;justify-content:flex-end">
     <button class="g s" data-a="note" ${P('pantry',x.id)}>Opis</button>
     <button class="g s" data-a="always" ${P(x.id)}>${x.always?'Policz':'Zawsze mam'}</button>
     <button class="g s" data-a="del" ${P('pantry',x.id)}>Usuń</button></div></div>`).join('')||'<p class="empty">Pusto. Wpisz powyżej, co masz w domu, rozdzielając przecinkami.</p>'}`;
@@ -200,7 +223,10 @@ rec(){
     return `<h2>${editR==='new'?'Nowy przepis':'Edytuj przepis'}</h2>
     <input id="rn" placeholder="Nazwa" value="${e(r.name)}">
     <textarea id="rd" placeholder="Opis (np. ulubione naleśniki niedzielne)">${e(r.desc)}</textarea>
-    <textarea id="ri" placeholder="Składniki, każdy w nowej linii&#10;mąka 250 g&#10;mleko 0,5 l&#10;jajka 2" style="min-height:130px">${e(r.ingText??r.ing.map(i=>`${i.name} ${i.qty}${i.unit?' '+i.unit:''}`).join('\n'))}</textarea>
+    <div class="m" style="margin-top:14px">Składniki (ilość możesz zostawić pustą)</div>
+    <div id="ings">${rowsFrom(r).map(x=>ingRow(x[0],x[1])).join('')}</div>
+    <datalist id="dl">${[...new Set(S.pantry.map(x=>x.name))].map(n=>`<option value="${e(n)}">`).join('')}</datalist>
+    <button class="g s" data-a="ing" style="margin-top:10px">+ składnik</button>
     <textarea id="rs" placeholder="Kroki przygotowania" style="min-height:130px">${e(r.steps)}</textarea>
     <div class="row" style="margin-top:10px"><button data-a="rsave">Zapisz</button><button class="g" data-a="rcancel">Anuluj</button></div>`;
   }
@@ -208,12 +234,12 @@ rec(){
   ${[...S.recipes].map(r=>({r,mi:missing(r)})).sort((a,b)=>a.mi.length-b.mi.length||a.r.name.localeCompare(b.r.name,'pl')).map(({r,mi})=>{return `<details class="it"><summary><div class="t"><span class="n">${e(r.name)}</span>
     ${mi.length===0?'<span class="m ok">masz wszystko ✓</span>':mi.length===1?`<span class="m no">brakuje tylko: ${e(mi[0].name)}</span>`:`<span class="m no">brakuje ${mi.length}</span>`}</div>
     ${r.desc?`<div class="m">${e(r.desc)}</div>`:''}</summary>
-    <ul>${r.ing.map(i=>`<li class="${have(i)>=i.qty?'ok':'no'}">${e(i.name)} ${fmt(i.qty,i.unit)}</li>`).join('')}</ul>
+    <ul>${r.ing.map(i=>`<li class="${short(i)?'no':'ok'}">${e(i.name)}${i.qty>0?' '+fmt(i.qty,i.unit):''}</li>`).join('')}</ul>
     <div style="white-space:pre-wrap">${e(r.steps)}</div>
     <div class="row" style="margin-top:10px;flex-wrap:wrap">
     ${mi.length?`<button class="s" data-a="rshop" ${P(r.id)}>Braki → zakupy</button>`:''}
     <button class="s" data-a="rcook" ${P(r.id)}>Ugotowane (odejmij)</button>
-    <button class="g s" data-a="redit" ${P(r.id)}>Edytuj</button><button class="g s" data-a="rdel" ${P(r.id)}>Usuń</button></div></details>`}).join('')||'<p class="empty">Dodaj pierwszy przepis, który często gotujecie.</p>'}`;
+    <button class="g s" data-a="redit" ${P(r.id)}>Edytuj</button><button class="g s" data-a="rdel" ${P(r.id)}>${delId===r.id?'Na pewno?':'Usuń'}</button></div></details>`}).join('')||'<p class="empty">Dodaj pierwszy przepis, który często gotujecie.</p>'}`;
 },
 shop(){
   const n=S.shop.filter(x=>x.done).length;
