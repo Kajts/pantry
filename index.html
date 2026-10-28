@@ -42,6 +42,11 @@ details summary::-webkit-details-marker{display:none}
 .empty{color:var(--mut);padding:22px 6px;text-align:center}
 #qr{background:#fff;padding:14px;display:inline-block;border-radius:18px}
 ul{padding-left:20px;margin:8px 0}
+input[type=search]{-webkit-appearance:none;appearance:none}
+.head{display:flex;align-items:center;gap:10px;margin:4px 0 14px}.head h2{margin:0}
+.srch{flex:1;display:flex;justify-content:flex-end;gap:8px;align-items:center;min-width:0}
+.srch input{display:none;flex:1;min-width:0;padding:9px 14px}.srch.open input{display:block}
+.ic{padding:10px 12px;line-height:0}.ic.on{background:var(--hi);color:var(--hiT)}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;background:var(--tx);color:var(--bg);padding:10px 18px;border-radius:999px;opacity:0;pointer-events:none;transition:opacity .2s;font-weight:700;z-index:9}#toast.show{opacity:1}
 .ing-row{display:flex;gap:8px;margin-top:8px}.ing-row .pn{flex:3;min-width:0}.ing-row .pa{flex:2;min-width:0}.ing-row button{padding:8px 14px}
 @media(prefers-reduced-motion:no-preference){button{transition:transform .1s}button:active{transform:scale(.97)}}
@@ -97,7 +102,7 @@ const $=s=>document.querySelector(s), uid=()=>Math.random().toString(36).slice(2
 const e=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt=(q,u)=>(+(+q).toFixed(2))+(u?' '+u:'');
 const LS={get(k){try{return localStorage.getItem(k)}catch(_){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(_){}}};
-let S={pantry:[],recipes:[],shop:[]},tab='pantry',editR=null,draft=null,noteId=null,delId=null,ref=null,sync='lokalnie (bez Firebase)';
+let S={pantry:[],recipes:[],shop:[]},tab='pantry',editR=null,draft=null,noteId=null,pq='',sOpen=false,delId=null,ref=null,sync='lokalnie (bez Firebase)';
 let code=location.hash.slice(1)||LS.get('sp_code')||uid()+uid()+uid();
 LS.set('sp_code',code);try{history.replaceState(null,'','#'+code)}catch(_){}
 try{S=Object.assign(S,JSON.parse(LS.get('sp_'+code)||'{}'))}catch(_){}
@@ -155,13 +160,14 @@ function importText(t){
 }
 
 const A={
-  padd(){$('#q').value.split(/[,\n;]+/).filter(x=>x.trim()).forEach(x=>addTo('pantry',parse(x)));save()},
+  padd(){$('#q').value.split(/[,\n;]+/).filter(x=>x.trim()).forEach(x=>addTo('pantry',parse(x)));pq='';save()},
   sadd(){$('#q').value.split(/[,\n;]+/).filter(x=>x.trim()).forEach(x=>addTo('shop',parse(x)));save()},
   inc(l,i,d){d=+d;const x=S[l].find(y=>y.id===i);const st=/^(g|ml)$/.test(x.unit)?100:1;x.qty=Math.max(0,x.qty+d*st);save()},
   del(l,i){S[l]=S[l].filter(y=>y.id!==i);save()},
   note(l,i){noteId=i;render();setTimeout(()=>{const f=$('#nt');if(f){f.focus();f.select()}},0)},
   notesave(i){const x=S.pantry.find(y=>y.id===i);if(x)x.note=$('#nt').value.trim();noteId=null;save()},
   notecancel(){noteId=null;render()},
+  stog(){sOpen=!sOpen;if(!sOpen)pq='';render();if(sOpen)setTimeout(()=>{const f=$('#ps');if(f)f.focus()},0)},
   always(i){const x=S.pantry.find(y=>y.id===i);x.always=!x.always;save()},
   chk(i){const x=S.shop.find(y=>y.id===i);x.done=!x.done;save()},
   bought(){S.shop.filter(x=>x.done).forEach(x=>addTo('pantry',{name:x.name,qty:x.qty,unit:x.unit}));S.shop=S.shop.filter(x=>!x.done);save()},
@@ -191,6 +197,7 @@ document.addEventListener('click',ev=>{
   A[a](...(b.dataset.p?b.dataset.p.split('|'):[]));
 });
 $('#nav').addEventListener('click',ev=>{const b=ev.target.closest('button');if(b){tab=b.dataset.t;editR=null;render()}});
+document.addEventListener('input',ev=>{if(ev.target.id==='ps'){pq=ev.target.value;$('#plist').innerHTML=pantryList()}});
 document.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&ev.target.id==='nt')A.notesave(noteId);if(ev.key==='Enter'&&ev.target.id==='q')(tab==='shop'?A.sadd:A.padd)()});
 function toast(m){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';document.body.appendChild(t)}t.textContent=m;t.className='show';clearTimeout(toast.h);toast.h=setTimeout(()=>{t.className=''},2600)}
 const P=(...a)=>`data-p="${a.join('|')}"`;
@@ -200,19 +207,24 @@ function rowsFrom(r){
   const rows=r.ingText!==undefined?r.ingText.split('\n').filter(x=>x.trim()).map(l=>{if(!/\d/.test(l))return [l.trim(),''];const o=parse(l);return [o.name,fmt(o.qty,o.unit)]}):r.ing.map(i=>[i.name,i.qty>0?fmt(i.qty,i.unit):'']);
   while(rows.length<3)rows.push(['','']);return rows;
 }
-// ====== Widoki ======
-const quick=(act,ph)=>`<div class="row"><input id="q" placeholder="${ph}" autocomplete="off"><button data-a="${act}">Dodaj</button></div>`;
-const V={
-pantry(){
-  const L=[...S.pantry].sort((a,b)=>a.name.localeCompare(b.name,'pl'));
-  return `<h2>Spiżarnia</h2>${quick('padd','mleko 2, jajka 10, mąka 1 kg')}
-  ${L.map(x=>`<div class="it ${x.always?'always':''}"><div class="t"><div><div class="n">${e(x.name)}</div>
+function pantryList(){
+  let L=[...S.pantry].sort((a,b)=>a.name.localeCompare(b.name,'pl'));
+  const t=pq.trim();
+  if(t){const qk=key(t),ql=t.toLowerCase();L=L.filter(x=>(qk&&x.key.includes(qk))||x.name.toLowerCase().includes(ql)||(x.note||'').toLowerCase().includes(ql))}
+  return `${L.map(x=>`<div class="it ${x.always?'always':''}"><div class="t"><div><div class="n">${e(x.name)}</div>
     ${x.note?`<div class="m">${e(x.note)}</div>`:''}</div>
     <div class="row">${x.always?'<span class="tag">zawsze mam</span>':`<button class="g s" data-a="inc" ${P('pantry',x.id,-1)}>−</button><span class="q">${fmt(x.qty,x.unit)}</span><button class="g s" data-a="inc" ${P('pantry',x.id,1)}>+</button>`}</div></div>
     ${noteId===x.id?`<div class="row" style="margin-top:10px"><input id="nt" value="${e(x.note)}" placeholder="np. dolna półka, marka, otwarte 20.10" autocomplete="off"><button class="s" data-a="notesave" data-p="${x.id}">Zapisz</button><button class="g s" data-a="notecancel">×</button></div>`:''}<div class="row" style="margin-top:8px;justify-content:flex-end">
     <button class="g s" data-a="note" ${P('pantry',x.id)}>Opis</button>
     <button class="g s" data-a="always" ${P(x.id)}>${x.always?'Policz':'Zawsze mam'}</button>
-    <button class="g s" data-a="del" ${P('pantry',x.id)}>Usuń</button></div></div>`).join('')||'<p class="empty">Pusto. Wpisz powyżej, co masz w domu, rozdzielając przecinkami.</p>'}`;
+    <button class="g s" data-a="del" ${P('pantry',x.id)}>Usuń</button></div></div>`).join('')||(pq.trim()?'<p class="empty">Nic nie znaleziono.</p>':'<p class="empty">Pusto. Wpisz powyżej, co masz w domu, rozdzielając przecinkami.</p>')}`;
+}
+// ====== Widoki ======
+const quick=(act,ph)=>`<div class="row"><input id="q" placeholder="${ph}" autocomplete="off"><button data-a="${act}">Dodaj</button></div>`;
+const V={
+pantry(){
+  return `<div class="head"><h2>Spiżarnia</h2><div class="srch ${sOpen?'open':''}"><input id="ps" type="search" placeholder="Szukaj…" value="${e(pq)}" autocomplete="off" aria-label="Szukaj w spiżarni"><button class="g ic ${sOpen?'on':''}" data-a="stog" aria-label="Szukaj" aria-expanded="${sOpen}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button></div></div>${quick('padd','mleko 2, jajka 10, mąka 1 kg')}
+  <div id="plist">${pantryList()}</div>`;
 },
 rec(){
   if(editR==='import')return `<h2>Importuj przepis</h2><p class="m">Skopiuj tekst przepisu ze strony (tytuł, składniki, sposób przygotowania) i wklej tutaj. Aplikacja rozpozna sekcje, a przed zapisem możesz wszystko poprawić.</p>
