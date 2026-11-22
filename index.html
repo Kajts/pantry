@@ -42,6 +42,15 @@ details summary::-webkit-details-marker{display:none}
 .empty{color:var(--mut);padding:22px 6px;text-align:center}
 #qr{background:#fff;padding:14px;display:inline-block;border-radius:18px}
 ul{padding-left:20px;margin:8px 0}
+.pl{width:34px;height:34px;min-width:34px;padding:0;border-radius:50%;font-size:.9rem;font-weight:800;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:2px dotted var(--mut);color:var(--mut)}
+.pl-L{background:#4a90d9;border:2px solid #4a90d9;color:#fff}
+.pl-Z{background:#1f3a6e;border:2px solid #1f3a6e;color:#fff}
+.pl-S{background:#fff;border:2px solid #cfc9cc;color:#2d2a32}
+.pl-K{background:#999ba0;border:2px solid #999ba0;color:#2d2a32}
+.pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.pillb{background:var(--soft);color:var(--ac);padding:7px 14px;font-size:.9rem}.pillb.on{background:var(--ac);color:var(--on)}
+.grp{margin:20px 4px 0;font-weight:700;color:var(--mut);font-size:.9rem;text-transform:uppercase;letter-spacing:.04em}.grp span{font-weight:600;opacity:.7}
+.ic.act{position:relative}.ic.act::after{content:"";position:absolute;top:5px;right:5px;width:8px;height:8px;border-radius:50%;background:var(--bad)}
 input[type=search]{-webkit-appearance:none;appearance:none}
 .head{display:flex;align-items:center;gap:10px;margin:4px 0 14px}.head h2{margin:0}
 .srch{flex:1;display:flex;justify-content:flex-end;gap:8px;align-items:center;min-width:0}
@@ -102,7 +111,7 @@ const $=s=>document.querySelector(s), uid=()=>Math.random().toString(36).slice(2
 const e=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt=(q,u)=>(+(+q).toFixed(2))+(u?' '+u:'');
 const LS={get(k){try{return localStorage.getItem(k)}catch(_){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(_){}}};
-let S={pantry:[],recipes:[],shop:[]},tab='pantry',editR=null,draft=null,noteId=null,pq='',sOpen=false,delId=null,ref=null,sync='lokalnie (bez Firebase)';
+let S={pantry:[],recipes:[],shop:[],places:{}},tab='pantry',editR=null,draft=null,noteId=null,pq='',sOpen=false,fOpen=false,pf='all',sortMode=LS.get('sp_sort')||'az',delId=null,ref=null,sync='lokalnie (bez Firebase)';
 let code=location.hash.slice(1)||LS.get('sp_code')||uid()+uid()+uid();
 LS.set('sp_code',code);try{history.replaceState(null,'','#'+code)}catch(_){}
 try{S=Object.assign(S,JSON.parse(LS.get('sp_'+code)||'{}'))}catch(_){}
@@ -119,7 +128,7 @@ if(FIREBASE_CONFIG&&window.firebase){
     sync='zsynchronizowano ✓';
     if(!d.exists){ref.set(S);return}
     if(d.metadata.hasPendingWrites)return;
-    S=Object.assign({pantry:[],recipes:[],shop:[]},d.data());
+    S=Object.assign({pantry:[],recipes:[],shop:[],places:{}},d.data());
     LS.set('sp_'+code,JSON.stringify(S));
     if(!/INPUT|TEXTAREA/.test(document.activeElement.tagName))render();
   },err=>{sync='błąd: '+err.message;render()});
@@ -131,7 +140,7 @@ function addTo(list,o){
   o.key=key(o.name);
   const f=S[list].find(x=>same(x,o));
   if(f){f.qty+=o.qty;if(!f.unit)f.unit=o.unit}
-  else S[list].push({id:uid(),name:o.name,key:o.key,qty:o.qty,unit:o.unit,note:'',always:false,done:false});
+  else S[list].push({id:uid(),name:o.name,key:o.key,qty:o.qty,unit:o.unit,note:'',always:false,done:false,place:list==='pantry'?((S.places||{})[o.key]||''):''});
 }
 const toBase=(q,u)=>u==='kg'?[q*1000,'g']:u==='l'?[q*1000,'ml']:[q,u];
 const nu=u=>{u=toBase(0,u)[1];return u==='szt'?'':u};
@@ -167,6 +176,15 @@ const A={
   note(l,i){noteId=i;render();setTimeout(()=>{const f=$('#nt');if(f){f.focus();f.select()}},0)},
   notesave(i){const x=S.pantry.find(y=>y.id===i);if(x)x.note=$('#nt').value.trim();noteId=null;save()},
   notecancel(){noteId=null;render()},
+  place(i){
+    const x=S.pantry.find(y=>y.id===i);if(!x)return;
+    const O=['','L','Z','S','K'];x.place=O[(O.indexOf(x.place||'')+1)%O.length];
+    S.places=S.places||{};if(x.place)S.places[x.key]=x.place;else delete S.places[x.key];
+    toast(x.place?PN[x.place]:'Bez miejsca');save();
+  },
+  ftog(){fOpen=!fOpen;render()},
+  fsort(v){sortMode=v;LS.set('sp_sort',v);render()},
+  fplace(v){pf=v;render()},
   stog(){sOpen=!sOpen;if(!sOpen)pq='';render();if(sOpen)setTimeout(()=>{const f=$('#ps');if(f)f.focus()},0)},
   always(i){const x=S.pantry.find(y=>y.id===i);x.always=!x.always;save()},
   chk(i){const x=S.shop.find(y=>y.id===i);x.done=!x.done;save()},
@@ -207,23 +225,35 @@ function rowsFrom(r){
   const rows=r.ingText!==undefined?r.ingText.split('\n').filter(x=>x.trim()).map(l=>{if(!/\d/.test(l))return [l.trim(),''];const o=parse(l);return [o.name,fmt(o.qty,o.unit)]}):r.ing.map(i=>[i.name,i.qty>0?fmt(i.qty,i.unit):'']);
   while(rows.length<3)rows.push(['','']);return rows;
 }
+const PN={L:'Lodówka',Z:'Zamrażarka',S:'Spiżarnia',K:'Szafka'};
+const pill=(a,v,t,on)=>`<button class="pillb ${on?'on':''}" data-a="${a}" data-p="${v}">${t}</button>`;
+function fpanel(){
+  if(!fOpen)return '';
+  return `<div class="it"><div class="m">Sortuj</div><div class="pills">${pill('fsort','az','A–Z',sortMode==='az')}${pill('fsort','place','Według miejsca',sortMode==='place')}</div>
+  <div class="m" style="margin-top:12px">Pokaż</div><div class="pills">${[['all','Wszystko'],['L','Lodówka'],['Z','Zamrażarka'],['S','Spiżarnia'],['K','Szafka'],['none','Bez miejsca']].map(([v,t])=>pill('fplace',v,t,pf===v)).join('')}</div></div>`;
+}
+const pItem=x=>`<div class="it ${x.always?'always':''}"><div class="t"><div><div class="n">${e(x.name)}</div>
+    ${x.note?`<div class="m">${e(x.note)}</div>`:''}</div>
+    <div class="row">${x.always?'<span class="tag">zawsze mam</span>':`<button class="g s" data-a="inc" ${P('pantry',x.id,-1)}>−</button><span class="q">${fmt(x.qty,x.unit)}</span><button class="g s" data-a="inc" ${P('pantry',x.id,1)}>+</button>`}</div></div>
+    ${noteId===x.id?`<div class="row" style="margin-top:10px"><input id="nt" value="${e(x.note)}" placeholder="np. dolna półka, marka, otwarte 20.10" autocomplete="off"><button class="s" data-a="notesave" data-p="${x.id}">Zapisz</button><button class="g s" data-a="notecancel">×</button></div>`:''}<div class="row" style="margin-top:8px;justify-content:flex-end">
+    <button class="pl pl-${x.place||'0'}" data-a="place" ${P(x.id)} aria-label="Miejsce: ${x.place?PN[x.place]:'brak'}">${x.place||''}</button>
+    <button class="g s" data-a="note" ${P('pantry',x.id)}>Opis</button>
+    <button class="g s" data-a="always" ${P(x.id)}>${x.always?'Policz':'Zawsze mam'}</button>
+    <button class="g s" data-a="del" ${P('pantry',x.id)}>Usuń</button></div></div>`;
 function pantryList(){
   let L=[...S.pantry].sort((a,b)=>a.name.localeCompare(b.name,'pl'));
   const t=pq.trim();
   if(t){const qk=key(t),ql=t.toLowerCase();L=L.filter(x=>(qk&&x.key.includes(qk))||x.name.toLowerCase().includes(ql)||(x.note||'').toLowerCase().includes(ql))}
-  return `${L.map(x=>`<div class="it ${x.always?'always':''}"><div class="t"><div><div class="n">${e(x.name)}</div>
-    ${x.note?`<div class="m">${e(x.note)}</div>`:''}</div>
-    <div class="row">${x.always?'<span class="tag">zawsze mam</span>':`<button class="g s" data-a="inc" ${P('pantry',x.id,-1)}>−</button><span class="q">${fmt(x.qty,x.unit)}</span><button class="g s" data-a="inc" ${P('pantry',x.id,1)}>+</button>`}</div></div>
-    ${noteId===x.id?`<div class="row" style="margin-top:10px"><input id="nt" value="${e(x.note)}" placeholder="np. dolna półka, marka, otwarte 20.10" autocomplete="off"><button class="s" data-a="notesave" data-p="${x.id}">Zapisz</button><button class="g s" data-a="notecancel">×</button></div>`:''}<div class="row" style="margin-top:8px;justify-content:flex-end">
-    <button class="g s" data-a="note" ${P('pantry',x.id)}>Opis</button>
-    <button class="g s" data-a="always" ${P(x.id)}>${x.always?'Policz':'Zawsze mam'}</button>
-    <button class="g s" data-a="del" ${P('pantry',x.id)}>Usuń</button></div></div>`).join('')||(pq.trim()?'<p class="empty">Nic nie znaleziono.</p>':'<p class="empty">Pusto. Wpisz powyżej, co masz w domu, rozdzielając przecinkami.</p>')}`;
+  if(pf!=='all')L=L.filter(x=>pf==='none'?!x.place:x.place===pf);
+  if(!L.length)return (t||pf!=='all')?'<p class="empty">Nic nie znaleziono.</p>':'<p class="empty">Pusto. Wpisz powyżej, co masz w domu, rozdzielając przecinkami.</p>';
+  if(sortMode==='place')return ['','L','Z','S','K'].map(g=>{const G=L.filter(x=>(x.place||'')===g);return G.length?`<div class="grp">${g?PN[g]:'Bez miejsca'} <span>${G.length}</span></div>`+G.map(pItem).join(''):''}).join('');
+  return L.map(pItem).join('');
 }
 // ====== Widoki ======
 const quick=(act,ph)=>`<div class="row"><input id="q" placeholder="${ph}" autocomplete="off"><button data-a="${act}">Dodaj</button></div>`;
 const V={
 pantry(){
-  return `<div class="head"><h2>Spiżarnia</h2><div class="srch ${sOpen?'open':''}"><input id="ps" type="search" placeholder="Szukaj…" value="${e(pq)}" autocomplete="off" aria-label="Szukaj w spiżarni"><button class="g ic ${sOpen?'on':''}" data-a="stog" aria-label="Szukaj" aria-expanded="${sOpen}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button></div></div>${quick('padd','mleko 2, jajka 10, mąka 1 kg')}
+  return `<div class="head"><h2>Spiżarnia</h2><div class="srch ${sOpen?'open':''}"><input id="ps" type="search" placeholder="Szukaj…" value="${e(pq)}" autocomplete="off" aria-label="Szukaj w spiżarni"><button class="g ic ${fOpen?'on':''} ${(sortMode!=='az'||pf!=='all')?'act':''}" data-a="ftog" aria-label="Filtry" aria-expanded="${fOpen}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M7 12h10M10 17h4"/></svg></button><button class="g ic ${sOpen?'on':''}" data-a="stog" aria-label="Szukaj" aria-expanded="${sOpen}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button></div></div>${fpanel()}${quick('padd','mleko 2, jajka 10, mąka 1 kg')}
   <div id="plist">${pantryList()}</div>`;
 },
 rec(){
